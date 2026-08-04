@@ -1,0 +1,75 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- uv ----
+# uv creates a local venv (.venv) and a lockfile (uv.lock).
+# Keep uv.lock committed (reproducible builds) — do NOT ignore it.
+# Only ignore uv's cache, not the lockfile itself.
+.uv/
+.uv_cache/
+
+# ---- Environment variables / secrets ----
+.env
+.env.*
+!.env.example
+
+# ---- Distribution / packaging ----
+build/
+dist/
+*.egg-info/
+*.egg
+
+# ---- Testing / coverage ----
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Jupyter ----
+.ipynb_checkpoints/
+
+# ---- Databases (local dev) ----
+*.sqlite3
+*.db
+
+# ---- Logs ----
+*.log
+logs/
+
+# ---- Docker ----
+*.pid
+
+# ---- Vector DB / RAG local data ----
+qdrant_storage/
+data/raw/
+data/processed/
+embeddings_cache/
+
+# ---- IDE / Editor ----
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+
+# ---- Alembic (keep migrations, ignore local sqlite used for testing) ----
+*.sqlite
+
+# ---- Celery ----
+celerybeat-schedule
+celerybeat.pid
