@@ -65,7 +65,7 @@ async def analyze_interaction(drug_a: str, drug_b: str) -> dict:
         }
 
     prompt  = EXTRACTION_PROMPT_TEMPLATE.format(
-        drug_a = drug_a,text_a = text_a[:4000]
+        drug_a = drug_a,text_a = text_a[:4000],
         drug_b = drug_b,text_b = text_b[:4000]
     )
 
@@ -108,4 +108,10 @@ async def analyze_all_interactions(drug_names: list[str]) -> list[dict]:
         logger.warning("Need at least 2 drugs to check interactions, got %d", len(drug_names))
         return []
 
-    result  = []
+    results  = []
+    for drug_a,drug_b in itertools.combinations(drug_names,2):
+        result  = await analyze_interaction(drug_a,drug_b)
+        results.append(result)
+
+
+
