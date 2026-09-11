@@ -113,5 +113,6 @@ async def analyze_all_interactions(drug_names: list[str]) -> list[dict]:
         result  = await analyze_interaction(drug_a,drug_b)
         results.append(result)
 
+    return results
 
 
