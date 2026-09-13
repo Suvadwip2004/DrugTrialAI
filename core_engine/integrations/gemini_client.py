@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from typing import Any
 
 from google import genai
 from google.genai import types
@@ -15,12 +16,11 @@ from tenacity import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+_client: Any | None = None
 
-_client: genai.Client | None = None
 
-
-def _get_client() -> genai.Client:
+def _get_client() -> Any:
     """
     Lazily create a single shared Gemini client.
     Reads the API key from the GEMINI_API_KEY env var automatically
@@ -115,11 +115,9 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     async def _main():
-        # Plain text test
         text = await call_llm("In one sentence, what is a drug-drug interaction?")
         print("Plain text response:\n", text)
 
-        # Structured JSON test
         json_prompt = (
             "Return a JSON object with two fields: 'drug' (string) and "
             "'common_use' (string), for the drug Warfarin. "
