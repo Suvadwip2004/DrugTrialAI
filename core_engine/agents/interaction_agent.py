@@ -116,3 +116,21 @@ async def analyze_all_interactions(drug_names: list[str]) -> list[dict]:
     return results
 
 
+ 
+# ---- standalone test ----
+# Run directly with: uv run python agents/interaction_agent.py
+if __name__ == "__main__":
+    import asyncio
+    import json
+ 
+    logging.basicConfig(level=logging.INFO)
+ 
+    async def _main():
+        drugs = ["Warfarin", "Amoxicillin"]
+        results = await analyze_all_interactions(drugs)
+        print("\n=== Interaction Analysis Results ===")
+        print(json.dumps(results, indent=2))
+        with open("interaction_agent.json","w",encoding="UTF-8") as f:
+            json.dump(results,f,indent=4)
+ 
+    asyncio.run(_main())
