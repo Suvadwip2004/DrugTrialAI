@@ -1,9 +1,9 @@
 from __future__ import annotations
 import logging
 import itertools
-from integrations.gemini_client import call_llm_json
-from integrations.openfda_client import get_interaction_text
-from integrations.rxnav_client import get_rxcuis
+from core_engine.integrations.gemini_client import call_llm_json
+from core_engine.integrations.openfda_client import get_interaction_text
+from core_engine.integrations.rxnav_client import get_rxcuis
 
 logger  = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ async def analyze_interaction(drug_a: str, drug_b: str) -> dict:
     text_a  = await get_interaction_text(drug_a)
     text_b  = await get_interaction_text(drug_b)
 
-    if not drug_a or not drug_b:
+    if not text_a or not text_b:
         missing  = drug_a if not text_a else drug_b
         logger.warning("No FDA interaction text found for '%s' — cannot assess interaction", missing)
         return {
@@ -70,7 +70,7 @@ async def analyze_interaction(drug_a: str, drug_b: str) -> dict:
     )
 
     result  = await call_llm_json(prompt)
-    if result is None or isinstance(result,dict) :
+    if result is None or not isinstance(result,dict) :
         logger.warning("AI extraction failed or returned unexpected shape for %s + %s", drug_a, drug_b)
         return {
             "drug_a": drug_a,
@@ -85,7 +85,7 @@ async def analyze_interaction(drug_a: str, drug_b: str) -> dict:
             "confidence": 0.0,
         }
     severity  = result.get("severity", "unknown")
-    if severity is not VALID_SEVERITIES :
+    if severity not in VALID_SEVERITIES :
         logger.warning("AI returned unexpected severity value: '%s' — defaulting to 'unknown'", severity)
         severity = "unknown"
 
@@ -104,7 +104,7 @@ async def analyze_interaction(drug_a: str, drug_b: str) -> dict:
     }
  
 async def analyze_all_interactions(drug_names: list[str]) -> list[dict]:
-    if len(drug_names) > 2 :
+    if len(drug_names) < 2 :
         logger.warning("Need at least 2 drugs to check interactions, got %d", len(drug_names))
         return []
 
@@ -116,21 +116,18 @@ async def analyze_all_interactions(drug_names: list[str]) -> list[dict]:
     return results
 
 
+# if __name__ == "__main__":
+#     import asyncio
+#     import json
  
-# ---- standalone test ----
-# Run directly with: uv run python agents/interaction_agent.py
-if __name__ == "__main__":
-    import asyncio
-    import json
+#     logging.basicConfig(level=logging.INFO)
  
-    logging.basicConfig(level=logging.INFO)
+#     async def _main():
+#         drugs = ["Warfarin", "Amoxicillin"]
+#         results = await analyze_all_interactions(drugs)
+#         print("\n=== Interaction Analysis Results ===")
+#         print(json.dumps(results, indent=2))
+#         with open("interaction_agent.json","w",encoding="UTF-8") as f:
+#             json.dump(results,f,indent=4)
  
-    async def _main():
-        drugs = ["Warfarin", "Amoxicillin"]
-        results = await analyze_all_interactions(drugs)
-        print("\n=== Interaction Analysis Results ===")
-        print(json.dumps(results, indent=2))
-        with open("interaction_agent.json","w",encoding="UTF-8") as f:
-            json.dump(results,f,indent=4)
- 
-    asyncio.run(_main())
+#     asyncio.run(_main())
