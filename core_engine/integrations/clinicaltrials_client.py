@@ -79,29 +79,50 @@ async def search_trials(
 
 
     data  = resp.json()
-    studies  = data.get(studies,[])
+    studies  = data.get("studies",[])
 
-    result  = []
+    results  = []
     for study in studies:
         protocol  = study.get("protocolSection",{})
-        identification = protocol.get("")
-        
-    return data
+        identification = protocol.get("identificationModule",{})
+        status_module  = protocol.get("statusModule",{})
+        design_module  = protocol.get("designModule",{})
+        conditions_module = protocol.get("conditionsModule",{})
+        eligibility_module  = protocol.get("eligibilityModule",{})
+        arms_module  = protocol.get("armsInterventionsModule",{})
+
+    results.append({
+
+        "nct_id": identification.get("nctId"),
+        "title": identification.get("briefTitle"),
+        "status": status_module.get("overallStatus"),
+        "phase": design_module.get("phases", []),
+        "conditions": conditions_module.get("conditions", []),
+        "interventions": [
+            i.get("name") for i in arms_module.get("interventions", [])
+        ],
+        "eligibility_criteria": eligibility_module.get("eligibilityCriteria", ""),
+        "min_age": eligibility_module.get("minimumAge"),
+        "max_age": eligibility_module.get("maximumAge"),
+        "sex": eligibility_module.get("sex"),
+    })
+
+    return results
 
 
-if __name__ == "__main__":
-    import asyncio
-    import json
-    logging.basicConfig(level=logging.INFO)
-    async def main():
-        trials = await search_trials(
-            condition="Atrial Fibrillation",
-            intervention="Warfarin",
-            status="RECRUITING",
-            page_size=5
-        )
-        print(trials)
-        with open("clinicaltrials_client.json","w",encoding="UTF-8") as f:
-            json.dump(trials,f,indent=4)
+# if __name__ == "__main__":
+#     import asyncio
+#     import json
+#     logging.basicConfig(level=logging.INFO,filename="app.log")
+#     async def main():
+#         trials = await search_trials(
+#             condition="Atrial Fibrillation",
+#             intervention="Warfarin",
+#             status="RECRUITING",
+#             page_size=5
+#         )
+#         print(trials)
+#         with open("clinicaltrials_client.json","w",encoding="UTF-8") as f:
+#             json.dump(trials,f,indent=4)
 
-    asyncio.run(main())
+#     asyncio.run(main())
