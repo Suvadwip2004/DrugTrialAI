@@ -5,14 +5,13 @@ from integrations.gemini_client import call_llm
 logger  = logging.getLogger(__name__)
 
 
-# --- Severity weights (base points added to the risk score) ---
 SEVERITY_WEIGHTS = {
     "contraindicated": 10.0,
     "major": 6.0,
     "moderate": 3.0,
     "minor": 1.0,
     "none": 0.0,
-    "unknown": 1.5,  # missing data is treated as mild uncertainty risk, not zero
+    "unknown": 1.5, 
 }
 
 
@@ -113,7 +112,42 @@ def _risk_level_from_score(score: float) -> str:
         return "low"
  
 async def assess_risk(interactions: list[dict],patient_context: dict | None = None,include_llm_explanation: bool = True) -> dict:
-    pass
+    patient_context = patient_context or {}
+
+    interaction_score, hard_stop, interaction_notes = _score_interactions(interactions)
+    patient_score, patient_notes = _score_patient_context(patient_context)
+ 
+    raw_score = interaction_score + patient_score
+    composite_score = min(raw_score, MAX_SCORE)
+
+    if hard_stop:
+        composite_score  = MAX_SCORE
+
+    risk_level = "critical" if hard_stop else _risk_level_from_score(composite_score)
+    contributing_factors = interaction_notes + patient_notes 
+
+    if not contributing_factors:
+        contributing_factors = ["No significant interaction or patient-specific risk factors identified."]
+
+ 
+    result = {
+        "composite_risk_score": round(composite_score, 2),
+        "risk_level": risk_level,
+        "hard_stop": hard_stop,
+        "contributing_factors": contributing_factors,
+        "explanation": "",
+    }
+ 
+    if include_llm_explanation:
+        prompt  = EXPLANATION_PROMPT_TEMPLATE.format(risk_data = result)
+        try:
+            explanation  = call_llm(prompt)
+            result["explanation"] = explanation.strip()
+        except Exception as e:
+            logger.error("Risk explanation generation failed: %s", e)
+            result["explanation"] = "Explanation unavailable due to some intetrnal problem ."
+    
+
 
 
 
