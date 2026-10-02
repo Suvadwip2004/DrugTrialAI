@@ -1,6 +1,6 @@
 from __future__ import annotations
 import logging
-from integrations.gemini_client import call_llm
+from core_engine.integrations.gemini_client import call_llm
 
 logger  = logging.getLogger(__name__)
 
@@ -74,9 +74,9 @@ def _score_patient_context(patient_context: dict) -> tuple[float, list[str]]:
         return score,notes
 
     age = patient_context.get("age")
-    if isinstance(age,(int,float) and age >= AGE_HIGH_RISK_THRESHOLD):
+    if isinstance(age,(int,float)) and age >= AGE_HIGH_RISK_THRESHOLD:
         score += AGE_RISK_POINTS
-    notes.append(f"Age {age} is an independent risk factor (≥{AGE_HIGH_RISK_THRESHOLD})")
+        notes.append(f"Age {age} is an independent risk factor (≥{AGE_HIGH_RISK_THRESHOLD})")
 
     renal = patient_context.get("renal_function", "normal")
     renal_weight = RENAL_HEPATIC_WEIGHTS.get(renal, 0.0)
@@ -141,12 +141,16 @@ async def assess_risk(interactions: list[dict],patient_context: dict | None = No
     if include_llm_explanation:
         prompt  = EXPLANATION_PROMPT_TEMPLATE.format(risk_data = result)
         try:
-            explanation  = call_llm(prompt)
+            print("llm calling ")
+            explanation  =await call_llm(prompt)
+            print("llm call done")
             result["explanation"] = explanation.strip()
         except Exception as e:
             logger.error("Risk explanation generation failed: %s", e)
             result["explanation"] = "Explanation unavailable due to some intetrnal problem ."
-    
+    return result
+
+
 
 
 
@@ -154,8 +158,33 @@ async def assess_risk(interactions: list[dict],patient_context: dict | None = No
 if __name__ == "__main__":
     import asyncio
     import json
-
+    logging.basicConfig(level=logging.INFO,filemode="app.log")
     async def main():
-        pass
+                
+        mock_interactions = [
+            {
+                "drug_a": "Warfarin",
+                "drug_b": "Amoxicillin",
+                "interaction_found": True,
+                "severity": "moderate",
+                "mechanism": "Alters gut flora affecting vitamin K synthesis",
+                "description": "May potentiate anticoagulant effect, increasing bleeding risk.",
+                "source": "openfda+gemini",
+                "confidence": 0.85,
+            }
+        ]
+
+        patient_context = {
+            "age": 68,
+            "renal_function": "moderate_impairment",
+            "comorbidities": ["Chronic Kidney Disease Stage 3", "Hypertension"],
+        }
+ 
+        result = await assess_risk(mock_interactions, patient_context)
+        # print(json.dumps(result, indent=2))
+        with open ("risk_agent.json","w",encoding="UTF-8") as f:
+            json.dump(result,f,indent=4)
+
+
 
     asyncio.run(main())
