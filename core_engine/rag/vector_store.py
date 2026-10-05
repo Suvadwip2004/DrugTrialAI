@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 logger  = logging.getLogger(__name__)
-QDRANT_URL = os.get_env("QDRANT_URL","http://localhost:6333")
+QDRANT_URL = os.getenv("QDRANT_URL","http://localhost:6333")
 COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "clinical_documents")
 VECTOR_SIZE = 768
 
@@ -22,7 +22,7 @@ def _get_client() -> AsyncQdrantClient :
 
 async def ensure_collection() -> None:
     client  = _get_client()
-    exists  = client.collection_exists(COLLECTION_NAME)
+    exists  =await client.collection_exists(COLLECTION_NAME)
     if exists :
         logger.info("Collection '%s' already exists", COLLECTION_NAME)
         return
@@ -72,3 +72,52 @@ async def search_similar(query_embedding: list[float],limit: int = 5,source_filt
         query_filter = models.Filter(
             must=[models.FieldCondition(key="source", match=models.MatchValue(value=source_filter))]
         )
+    try:
+        results  = await client.query_points(collection_name=COLLECTION_NAME,query=query_embedding,limit=limit,query_filter=query_filter)
+    
+    except Exception as e:
+        logger.error("Qdrant search failed: %s", e)
+        return []
+
+    return [
+        {
+            "text" : point.payload.get("text",""),
+            "source" : point.payload.get("source",""),
+            "title": point.payload.get("title", ""),
+            "url": point.payload.get("url", ""),
+            "drug_names": point.payload.get("drug_names", []),
+            "score": point.score,
+        }
+        for point in results.points
+    ]
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    logging.basicConfig(level=logging.INFO,filemode="app.log")
+    async def main():
+        await ensure_collection()
+        dummy_embedding = [0.1] * VECTOR_SIZE
+
+        test_chunks = [
+            {
+                "text": "Warfarin may interact with amoxicillin, increasing bleeding risk.",
+                "embedding": dummy_embedding,
+                "source": "test",
+                "title": "Test Document",
+                "url": "https://example.com",
+                "drug_names": ["Warfarin", "Amoxicillin"],
+            }
+        ]
+        count  = await upsert_chunks(test_chunks)
+        print(f"Upserted {count} test chunk(s)")
+        results = await search_similar(dummy_embedding, limit=3)
+        print(f"\nFound {len(results)} similar chunk(s):")
+        for r in results:
+            print(f"  - [{r['score']:.3f}] {r['title']}: {r['text'][:80]}")
+
+
+    asyncio.run(main())
+
+
