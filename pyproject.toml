@@ -8,4 +8,5 @@ dependencies = [
     "google-genai>=2.23.0",
     "httpx>=0.28.1",
     "ollama>=0.6.3",
+    "qdrant-client>=1.19.1",
 ]
