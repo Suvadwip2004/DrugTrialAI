@@ -92,32 +92,32 @@ async def search_similar(query_embedding: list[float],limit: int = 5,source_filt
     ]
 
 
-if __name__ == "__main__":
-    import asyncio
+# if __name__ == "__main__":
+#     import asyncio
 
-    logging.basicConfig(level=logging.INFO,filemode="app.log")
-    async def main():
-        await ensure_collection()
-        dummy_embedding = [0.1] * VECTOR_SIZE
+#     logging.basicConfig(level=logging.INFO,filemode="app.log")
+#     async def main():
+#         await ensure_collection()
+#         dummy_embedding = [0.1] * VECTOR_SIZE
 
-        test_chunks = [
-            {
-                "text": "Warfarin may interact with amoxicillin, increasing bleeding risk.",
-                "embedding": dummy_embedding,
-                "source": "test",
-                "title": "Test Document",
-                "url": "https://example.com",
-                "drug_names": ["Warfarin", "Amoxicillin"],
-            }
-        ]
-        count  = await upsert_chunks(test_chunks)
-        print(f"Upserted {count} test chunk(s)")
-        results = await search_similar(dummy_embedding, limit=3)
-        print(f"\nFound {len(results)} similar chunk(s):")
-        for r in results:
-            print(f"  - [{r['score']:.3f}] {r['title']}: {r['text'][:80]}")
+#         test_chunks = [
+#             {
+#                 "text": "Warfarin may interact with amoxicillin, increasing bleeding risk.",
+#                 "embedding": dummy_embedding,
+#                 "source": "test",
+#                 "title": "Test Document",
+#                 "url": "https://example.com",
+#                 "drug_names": ["Warfarin", "Amoxicillin"],
+#             }
+#         ]
+#         count  = await upsert_chunks(test_chunks)
+#         print(f"Upserted {count} test chunk(s)")
+#         results = await search_similar(dummy_embedding, limit=3)
+#         print(f"\nFound {len(results)} similar chunk(s):")
+#         for r in results:
+#             print(f"  - [{r['score']:.3f}] {r['title']}: {r['text'][:80]}")
 
 
-    asyncio.run(main())
+#     asyncio.run(main())
 
 
