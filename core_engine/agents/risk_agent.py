@@ -15,7 +15,7 @@ SEVERITY_WEIGHTS = {
 }
 
 
-# --- Patient-context risk modifiers (added on top of interaction severity) ---
+
 RENAL_HEPATIC_WEIGHTS = {
     "normal": 0.0,
     "mild_impairment": 0.5,
