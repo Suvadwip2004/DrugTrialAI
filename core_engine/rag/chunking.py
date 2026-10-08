@@ -25,7 +25,7 @@ def _split_into_sentences(text : str) -> list[str] :
     return [sent.text.strip() for sent in doc.sents if sent.text.strip()]
 
 
-def chunk_text(text:str,chunk_size_words : int = DEFAULT_CHUNK_SIZE_WORDS,overlap_words : int=DEFAULT_OVERLAP_WORDS,):
+def chunk_text(text:str,chunk_size_words : int = DEFAULT_CHUNK_SIZE_WORDS,overlap_words : int=DEFAULT_OVERLAP_WORDS,) -> list[str]:
     if not text or not text.strip():
         return []
     if overlap_words >= chunk_size_words:
@@ -48,48 +48,63 @@ def chunk_text(text:str,chunk_size_words : int = DEFAULT_CHUNK_SIZE_WORDS,overla
             chunks.append(sentence)
             continue
 
+        if len(current_words) + len(sentence_words) > chunk_size_words :
+            chunks.append(" ".join(current_words))
+            overlap_slice  = current_words[-overlap_words:] if overlap_words > 0 else []
+            current_words  = overlap_slice + sentence_words
+        else:
+            current_words.extend(sentence_words)
+    if current_words :
+        chunks.append(" ".join(current_words))
+
+    return chunks
 
 
+def chunk_document(text:str,title:str = "",source:str="",url:str="",drug_names: list[str] | None = None,chunk_size_words: int = DEFAULT_CHUNK_SIZE_WORDS,overlap_words: int = DEFAULT_OVERLAP_WORDS) -> list[dict]:
+    drug_names = drug_names or []
+    raw_chunks = chunk_text(text, chunk_size_words, overlap_words)
+    return [
+        {
+            "text": chunk,
+            "title": title,
+            "source": source,
+            "url": url,
+            "drug_names": drug_names,
+        }
+        for chunk in raw_chunks
+    ]
 
-# ---- standalone test ----
+
 # Run directly with: uv run python -m core_engine.rag.chunking
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+# if __name__ == "__main__":
+#     logging.basicConfig(level=logging.INFO)
  
-    sample_text = (
-        "Warfarin is an anticoagulant used to prevent blood clots, e.g. in patients with A-fib. "
-        "It works by inhibiting vitamin K-dependent clotting factors (approx. 5.0 mg/day dosing). "
-        "Amoxicillin is a penicillin-class antibiotic commonly used for bacterial infections, "
-        "including those caused by Dr. Fleming's famously discovered mold-derived compounds. "
-        "When taken together, amoxicillin may alter gut flora responsible for vitamin K synthesis. "
-        "This can potentiate the anticoagulant effect of warfarin, increasing INR and bleeding risk. "
-        "Clinicians should monitor INR more frequently when these drugs are co-administered. "
-    ) 
-
-    result  = split_into_sentences(sample_text)
-    print(result)
-    print(type(result))
-    # with open("chunking_doc.json","w") as f:
-    #     json.dump(result,f)
-
-
+#     sample_text = (
+#         "Warfarin is an anticoagulant used to prevent blood clots, e.g. in patients with A-fib. "
+#         "It works by inhibiting vitamin K-dependent clotting factors (approx. 5.0 mg/day dosing). "
+#         "Amoxicillin is a penicillin-class antibiotic commonly used for bacterial infections, "
+#         "including those caused by Dr. Fleming's famously discovered mold-derived compounds. "
+#         "When taken together, amoxicillin may alter gut flora responsible for vitamin K synthesis. "
+#         "This can potentiate the anticoagulant effect of warfarin, increasing INR and bleeding risk. "
+#         "Clinicians should monitor INR more frequently when these drugs are co-administered. "
+#     ) * 5  # repeat to simulate a longer document
  
-    # chunks = chunk_document(
-    #     sample_text,
-    #     title="Warfarin-Amoxicillin Interaction Overview",
-    #     source="test",
-    #     url="https://example.com",
-    #     drug_names=["Warfarin", "Amoxicillin"],
-    #     chunk_size_words=50,  # small size here just to demonstrate multiple chunks
-    #     overlap_words=10,
-    # )
- 
-    # print(f"Produced {len(chunks)} chunk(s)\n")
-    # for i, c in enumerate(chunks):
-    #     word_count = len(c["text"].split())
-    #     print(f"--- Chunk {i+1} ({word_count} words) ---")
-    #     print(c["text"])
-    #     print()
- 
+#     chunks = chunk_document(
+#         sample_text,
+#         title="Warfarin-Amoxicillin Interaction Overview",
+#         source="test",
+#         url="https://example.com",
+#         drug_names=["Warfarin", "Amoxicillin"],
+#         chunk_size_words=50,  # small size here just to demonstrate multiple chunks
+#         overlap_words=10,
+#     )
 
-
+#     with open("chunking_small.json","w") as f:
+#         json.dump(chunks,f)
+#     print(f"Produced {len(chunks)} chunk(s)\n")
+#     for i, c in enumerate(chunks):
+#         word_count = len(c["text"].split())
+#         print(f"--- Chunk {i+1} ({word_count} words) ---")
+#         print(c["text"])
+#         print()
+ 
