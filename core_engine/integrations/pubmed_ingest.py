@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import logging
 import uuid
+import json
 
 from core_engine.integrations.pubmed_client import search_and_fetch
 from core_engine.rag.chunking import chunk_document
@@ -50,16 +51,20 @@ async def ingest_query(query:str,drug_names : list[str] | None = None,max_result
     return stats
 
 
-async def _main() -> None:
-    parser = argparse.ArgumentParser(description="Ingest PubMed abstracts into Qdrant")
-    parser.add_argument("--query",required=True)
-    parser.add_argument("--drugs",nargs="*",default=[])
-    parser.add_argument("--max-results",type=int,default=10)
-    args = parser.parse_args()
+# async def _main() -> None:
+#     parser = argparse.ArgumentParser(description="Ingest PubMed abstracts into Qdrant")
+#     parser.add_argument("--query",required=True)
+#     parser.add_argument("--drugs",nargs="*",default=[])
+#     parser.add_argument("--max-results",type=int,default=10)
+#     args = parser.parse_args()
 
-    stats = await ingest_query(args.query,drug_names=args.drugs,max_results=args.max_results)
+#     stats = await ingest_query(args.query,drug_names=args.drugs,max_results=args.max_results)
+#     print(f"\nDone: {stats}")
+#     with open("pubmed_ingest.json","w") as f:
+#         json.dump(stats,f)
 
 
-if __name__ == "__main__" :
-    logging.basicConfig(level=logging.INFO,filename="app.log")
-    asyncio.run(_main())
+
+# if __name__ == "__main__" :
+#     logging.basicConfig(level=logging.INFO,filename="app.log")
+#     asyncio.run(_main())
