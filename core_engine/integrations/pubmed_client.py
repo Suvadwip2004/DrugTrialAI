@@ -154,22 +154,22 @@ async def search_and_fetch(query: str, max_results: int = 10) -> list[dict]:
 
 
 
-if __name__ == "__main__":
-    import asyncio
-    import json
+# if __name__ == "__main__":
+#     import asyncio
+#     import json
 
-    logging.basicConfig(level=logging.INFO)
+#     logging.basicConfig(level=logging.INFO)
 
-    async def _main():
-        articles = await search_and_fetch("warfarin amoxicillin interaction", max_results=3)
-        with open("pubmed_clientresponse.json","w") as f:
-            json.dump(articles,f)
-        print(f"Fetched {len(articles)} article(s)\n")
-        for a in articles:
-            print(f"[{a['pmid']}] {a['title']} ({a['journal']}, {a['year']})")
-            print(f"  {a['url']}")
-            print(f"  {a['abstract'][:200]}...\n")
-            print(articles)
-            print(type(articles))
+#     async def _main():
+#         articles = await search_and_fetch("warfarin amoxicillin interaction", max_results=3)
+#         with open("pubmed_clientresponse.json","w") as f:
+#             json.dump(articles,f)
+#         print(f"Fetched {len(articles)} article(s)\n")
+#         for a in articles:
+#             print(f"[{a['pmid']}] {a['title']} ({a['journal']}, {a['year']})")
+#             print(f"  {a['url']}")
+#             print(f"  {a['abstract'][:200]}...\n")
+#             print(articles)
+#             print(type(articles))
 
-    asyncio.run(_main())
+#     asyncio.run(_main())
