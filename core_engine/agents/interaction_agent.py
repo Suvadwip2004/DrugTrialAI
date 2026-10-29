@@ -1,7 +1,7 @@
 from __future__ import annotations
 import logging
 import itertools
-from core_engine.integrations.gemini_client import call_llm_json
+from core_engine.integrations.llm_client import call_llm_json
 from core_engine.integrations.openfda_client import get_interaction_text
 from core_engine.integrations.rxnav_client import get_rxcuis
 

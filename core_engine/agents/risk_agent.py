@@ -1,6 +1,6 @@
 from __future__ import annotations
 import logging
-from core_engine.integrations.gemini_client import call_llm
+from core_engine.integrations.llm_client import call_llm
 
 logger  = logging.getLogger(__name__)
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from integrations.clinicaltrials_client import search_trials
-from integrations.gemini_client import call_llm_json
+from integrations.llm_client import call_llm_json
 
 logger = logging.getLogger(__name__)
 
