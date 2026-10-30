@@ -208,38 +208,38 @@ async def generate_report(
     return {"report_md": report_md, "summary": summary, "citations": citations}
 
 
-if __name__ == "__main__":
-    import asyncio
+# if __name__ == "__main__":
+#     import asyncio
 
-    logging.basicConfig(level=logging.INFO)
+#     logging.basicConfig(level=logging.INFO)
 
-    async def _main():
-        mock_interactions = [{
-            "drug_a": "Warfarin", "drug_b": "Amoxicillin", "interaction_found": True,
-            "severity": "moderate", "mechanism": "May alter gut flora affecting vitamin K synthesis",
-            "description": "May potentiate anticoagulant effect and raise INR.",
-            "source": "openfda+llm", "confidence": 0.8,
-        }]
-        mock_risk = {
-            "composite_risk_score": 6.5, "risk_level": "elevated", "hard_stop": False,
-            "contributing_factors": ["Warfarin + Amoxicillin: moderate severity interaction",
-                                     "Age 68 is an independent risk factor (>=65)"],
-            "explanation": "The score reflects a moderate interaction combined with age and renal impairment.",
-        }
-        mock_trials = [{
-            "nct_id": "NCT00000000", "title": "Example anticoagulation study", "status": "RECRUITING",
-            "phase": ["PHASE3"], "eligibility_match_score": 0.78,
-            "reason": "Condition and age range match.", "potential_concerns": "",
-        }]
+#     async def _main():
+#         mock_interactions = [{
+#             "drug_a": "Warfarin", "drug_b": "Amoxicillin", "interaction_found": True,
+#             "severity": "moderate", "mechanism": "May alter gut flora affecting vitamin K synthesis",
+#             "description": "May potentiate anticoagulant effect and raise INR.",
+#             "source": "openfda+llm", "confidence": 0.8,
+#         }]
+#         mock_risk = {
+#             "composite_risk_score": 6.5, "risk_level": "elevated", "hard_stop": False,
+#             "contributing_factors": ["Warfarin + Amoxicillin: moderate severity interaction",
+#                                      "Age 68 is an independent risk factor (>=65)"],
+#             "explanation": "The score reflects a moderate interaction combined with age and renal impairment.",
+#         }
+#         mock_trials = [{
+#             "nct_id": "NCT00000000", "title": "Example anticoagulation study", "status": "RECRUITING",
+#             "phase": ["PHASE3"], "eligibility_match_score": 0.78,
+#             "reason": "Condition and age range match.", "potential_concerns": "",
+#         }]
 
-        result = await generate_report(
-            drugs=["Warfarin", "Amoxicillin"],
-            condition="Atrial Fibrillation",
-            patient_context={"age": 68, "renal_function": "moderate_impairment"},
-            interactions=mock_interactions,
-            risk=mock_risk,
-            trials=mock_trials,
-        )
-        print(result["report_md"])
+#         result = await generate_report(
+#             drugs=["Warfarin", "Amoxicillin"],
+#             condition="Atrial Fibrillation",
+#             patient_context={"age": 68, "renal_function": "moderate_impairment"},
+#             interactions=mock_interactions,
+#             risk=mock_risk,
+#             trials=mock_trials,
+#         )
+#         print(result["report_md"])
 
-    asyncio.run(_main())
+#     asyncio.run(_main())
