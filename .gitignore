@@ -75,3 +75,4 @@ celerybeat-schedule
 celerybeat.pid
 test.py
 sample.py
+sample.md
