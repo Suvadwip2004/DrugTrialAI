@@ -152,6 +152,7 @@ async def generate_report(
     risk: dict | None = None,
     trials: list[dict] | None = None,
     literature: dict | None = None,
+    use_llm_summary: bool = True,
 ) -> dict:
 
     interactions = interactions or []
@@ -159,12 +160,15 @@ async def generate_report(
 
     # 1. LLM writes only the summary, from facts we hand it.
     facts = _build_facts_for_summary(drugs, condition, interactions, risk, trials)
-    try:
-        summary = (await call_llm(SUMMARY_PROMPT_TEMPLATE.format(facts=facts))).strip()
-        if not summary:
-            raise ValueError("empty summary")
-    except Exception as e:
-        logger.error("Summary generation failed, using fallback: %s", e)
+    if use_llm_summary:
+        try:
+            summary = (await call_llm(SUMMARY_PROMPT_TEMPLATE.format(facts=facts))).strip()
+            if not summary:
+                raise ValueError("empty summary")
+        except Exception as e:
+            logger.error("Summary generation failed, using fallback: %s", e)
+            summary = _fallback_summary(interactions, risk, trials)
+    else :
         summary = _fallback_summary(interactions, risk, trials)
 
     
