@@ -1,136 +1,252 @@
-from __future__ import annotations
+"""
+Tests for core_engine/agents/interaction_agent.py
 
-import logging
-
-from integrations.clinicaltrials_client import search_trials
-from integrations.llm_client import call_llm_json
-
-logger = logging.getLogger(__name__)
-
-MATCH_PROMPT_TEMPLATE = """You are a clinical trial eligibility assistant. Given a trial's eligibility criteria text and a patient's profile, determine how well the patient matches this trial.
-
-Trial: {title} (NCT ID: {nct_id})
-Eligibility Criteria:
-\"\"\"
-{eligibility_text}
-\"\"\"
-
-Patient Profile:
-{patient_profile}
-
-Return a single JSON object with exactly these fields:
-{{
-  "eligibility_match_score": a number between 0.0 and 1.0 (1.0 = clearly eligible, 0.0 = clearly excluded),
-  "reason": "1-2 sentence explanation of the score, referencing specific criteria",
-  "potential_concerns": "any exclusion criteria the patient might trigger, or empty string if none"
-}}
-
-Rules:
-- Base the score ONLY on the eligibility criteria text and patient profile provided above.
-- If the eligibility text is too vague/incomplete to judge, use a score around 0.5 and say so in "reason".
-- Return ONLY the JSON object, no markdown fences, no extra commentary.
+Label text and model answers are made up and injected with monkeypatch, so no
+network, Ollama or real drug label is involved. What is tested is the agent's
+safety behaviour: it must never turn a bad, contradictory or unsupported model
+answer into either a finding or a "none".
 """
 
+import pytest
 
-def _format_patient_profile(patient_context: dict) -> str:
-    if not patient_context:
-        return "(no patient details provided — assess generically)"
+from core_engine.agents import interaction_agent
+from core_engine.agents.interaction_agent import (
+    _normalize_extraction,
+    _quote_is_supported,
+    analyze_all_interactions,
+    analyze_interaction,
+)
 
-    lines = []
-    for key, value in patient_context.items():
-        if value:
-            lines.append(f"- {key.replace('_', ' ').title()}: {value}")
-    return "\n".join(lines) if lines else "(no patient details provided)"
+LABEL_A = "Concurrent use with oral anticoagulants may increase the risk of bleeding. Monitor closely."
+LABEL_B = "No interactions with other medicines have been described."
+QUOTE = "Concurrent use with oral anticoagulants may increase the risk of bleeding."
 
 
-async def score_trial_match(trial: dict, patient_context: dict) -> dict:
-    eligibility_text = trial.get("eligibility_criteria") or "(no eligibility criteria provided)"
-    patient_profile = _format_patient_profile(patient_context)
+def good_answer(**overrides):
+    answer = {
+        "interaction_found": True, "severity": "moderate",
+        "mechanism": "Class-level label warning", "description": "May increase bleeding risk.",
+        "evidence_quote": QUOTE, "confidence": 0.8,
+    }
+    answer.update(overrides)
+    return answer
 
-    prompt = MATCH_PROMPT_TEMPLATE.format(
-        title=trial.get("title", "Unknown trial"),
-        nct_id=trial.get("nct_id", "Unknown"),
-        eligibility_text=eligibility_text[:3000],  # cap for token control
-        patient_profile=patient_profile,
-    )
 
-    result = await call_llm_json(prompt)
+# --------------------------------------------------------------------------
+# _quote_is_supported
+# --------------------------------------------------------------------------
 
-    if result is None or not isinstance(result, dict):
-        logger.error("Eligibility scoring failed for trial %s", trial.get("nct_id"))
-        enriched = dict(trial)
-        enriched.update({
-            "eligibility_match_score": 0.0,
-            "reason": "Scoring failed — unable to assess eligibility match.",
-            "potential_concerns": "",
-        })
-        return enriched
+def test_exact_quote_is_supported():
+    assert _quote_is_supported(QUOTE, [LABEL_A])
 
-    enriched = dict(trial)
-    enriched.update({
-        "eligibility_match_score": float(result.get("eligibility_match_score", 0.0)),
-        "reason": result.get("reason", ""),
-        "potential_concerns": result.get("potential_concerns", ""),
+
+def test_quote_ignores_case_whitespace_and_surrounding_quotes():
+    messy = '  "concurrent   USE with oral anticoagulants\nmay increase the risk of bleeding." '
+    assert _quote_is_supported(messy, [LABEL_A])
+
+
+def test_quote_supported_when_found_in_either_label():
+    assert _quote_is_supported(QUOTE, [LABEL_B, LABEL_A])
+
+
+def test_ellipsis_quote_requires_each_fragment_to_appear():
+    assert _quote_is_supported("Concurrent use with oral anticoagulants ... increase the risk of bleeding", [LABEL_A])
+    assert not _quote_is_supported("Concurrent use with oral anticoagulants ... causes liver failure in children", [LABEL_A])
+
+
+@pytest.mark.parametrize("quote", ["", "   ", "too short", None])
+def test_empty_or_tiny_quote_is_not_evidence(quote):
+    assert not _quote_is_supported(quote, [LABEL_A])
+
+
+def test_invented_quote_is_not_supported():
+    assert not _quote_is_supported("This drug is dangerous when combined with anything.", [LABEL_A])
+
+
+def test_no_label_text_means_nothing_is_supported():
+    assert not _quote_is_supported(QUOTE, [])
+    assert not _quote_is_supported(QUOTE, [None, ""])
+
+
+# --------------------------------------------------------------------------
+# _normalize_extraction
+# --------------------------------------------------------------------------
+
+def test_contradictory_output_is_flagged_not_trusted():
+    # The exact shape that appeared in a real run.
+    out = _normalize_extraction({
+        "interaction_found": True, "severity": "none",
+        "mechanism": "", "description": "", "confidence": 1.0,
     })
-    return enriched
+    assert out["interaction_found"] is False
+    assert out["severity"] == "unknown"
+    assert out["confidence"] == 0.0
+    assert "inconsistent" in out["description"].lower()
 
 
-async def find_matching_trials(
-    condition: str | None = None,
-    drug_names: list[str] | None = None,
-    patient_context: dict | None = None,
-    phases: list[str] | None = None,
-    status: str = "RECRUITING",
-    max_trials: int = 5,
-) -> list[dict]:
-    intervention = drug_names[0] if drug_names else None
-    patient_context = patient_context or {}
-
-    trials = await search_trials(
-        condition=condition,
-        intervention=intervention,
-        phases=phases,
-        status=status,
-        page_size=max_trials,
-    )
-
-    if not trials:
-        logger.info("No trials found for condition='%s', intervention='%s'", condition, intervention)
-        return []
-
-    scored_trials = []
-    for trial in trials:
-        scored = await score_trial_match(trial, patient_context)
-        scored_trials.append(scored)
-
-    scored_trials.sort(key=lambda t: t["eligibility_match_score"], reverse=True)
-    return scored_trials
+def test_found_without_description_is_flagged():
+    out = _normalize_extraction(good_answer(description="   "))
+    assert out["severity"] == "unknown"
+    assert out["interaction_found"] is False
 
 
-# ---- standalone test ----
-if __name__ == "__main__":
-    import asyncio
-    import json
+def test_invalid_severity_with_found_true_is_flagged():
+    out = _normalize_extraction(good_answer(severity="catastrophic"))
+    assert out["severity"] == "unknown"
+    assert out["interaction_found"] is False
 
-    logging.basicConfig(level=logging.INFO)
 
-    async def _main():
-        patient_context = {
-            "age": 68,
-            "sex": "female",
-            "renal_function": "moderate_impairment",
-            "comorbidities": ["Chronic Kidney Disease Stage 3", "Hypertension"],
-        }
+def test_verified_finding_is_kept_with_its_evidence():
+    out = _normalize_extraction(good_answer(), (LABEL_A, LABEL_B))
+    assert out["interaction_found"] is True
+    assert out["severity"] == "moderate"
+    assert out["evidence"] == QUOTE
+    assert out["confidence"] == pytest.approx(0.8)
 
-        results = await find_matching_trials(
-            condition="Atrial Fibrillation",
-            drug_names=["Warfarin"],
-            patient_context=patient_context,
-            phases=["PHASE2", "PHASE3"],
-            max_trials=3,
-        )
 
-        print(f"\n=== Found {len(results)} scored trial(s) ===")
-        print(json.dumps(results, indent=2))
+def test_unsupported_evidence_makes_a_finding_unverified():
+    out = _normalize_extraction(good_answer(evidence_quote="Made up sentence about bleeding risk."), (LABEL_A,))
+    assert out["interaction_found"] is False
+    assert out["severity"] == "unknown"
+    assert "not found" in out["description"]
 
-    asyncio.run(_main())
+
+def test_missing_evidence_makes_a_finding_unverified():
+    out = _normalize_extraction(good_answer(evidence_quote=""), (LABEL_A,))
+    assert out["severity"] == "unknown"
+
+
+def test_not_found_forces_severity_none_and_clears_text():
+    out = _normalize_extraction({
+        "interaction_found": False, "severity": "major",
+        "mechanism": "leftover", "description": "leftover",
+        "evidence_quote": "leftover", "confidence": 0.7,
+    }, (LABEL_A,))
+    assert out["severity"] == "none"
+    assert out["mechanism"] == out["description"] == out["evidence"] == ""
+
+
+@pytest.mark.parametrize("raw", ["false", "False", "no"])
+def test_string_false_is_not_treated_as_true(raw):
+    # bool("false") is True in Python -- a classic trap with LLM JSON.
+    out = _normalize_extraction({"interaction_found": raw, "severity": "moderate",
+                                 "mechanism": "m", "description": "d", "confidence": 0.5})
+    assert out["interaction_found"] is False
+    assert out["severity"] == "none"
+
+
+@pytest.mark.parametrize("raw, expected", [(7, 1.0), (-2, 0.0), ("high", 0.0), (None, 0.0), (0.42, 0.42)])
+def test_confidence_is_clamped_to_zero_one(raw, expected):
+    out = _normalize_extraction({"interaction_found": False, "severity": "none", "confidence": raw})
+    assert out["confidence"] == pytest.approx(expected)
+
+
+def test_none_text_fields_do_not_crash():
+    out = _normalize_extraction(good_answer(mechanism=None))
+    assert out["mechanism"] == ""
+    assert out["interaction_found"] is True
+
+
+# --------------------------------------------------------------------------
+# analyze_interaction (full flow with fakes)
+# --------------------------------------------------------------------------
+
+@pytest.fixture
+def fakes(monkeypatch):
+    """Install fake services and return a state dict the tests can configure."""
+    state = {"labels": {"A": LABEL_A, "B": LABEL_B}, "answer": good_answer(), "llm_calls": []}
+
+    async def fake_rxcuis(names):
+        return {n: f"rx-{n}" for n in names}
+
+    async def fake_text(name):
+        return state["labels"].get(name)
+
+    async def fake_llm(prompt):
+        state["llm_calls"].append(prompt)
+        return state["answer"]
+
+    monkeypatch.setattr(interaction_agent, "get_rxcuis", fake_rxcuis)
+    monkeypatch.setattr(interaction_agent, "get_interaction_text", fake_text)
+    monkeypatch.setattr(interaction_agent, "call_llm_json", fake_llm)
+    return state
+
+
+async def test_verified_class_level_interaction_is_reported(fakes):
+    result = await analyze_interaction("A", "B")
+    assert result["interaction_found"] is True
+    assert result["severity"] == "moderate"
+    assert result["evidence"] == QUOTE
+    assert result["source"] == "openfda+llm"
+    assert result["rxcui_a"] == "rx-A"
+
+
+async def test_hallucinated_interaction_is_downgraded_to_unknown(fakes):
+    fakes["answer"] = good_answer(evidence_quote="The label says these two must never be combined.")
+    result = await analyze_interaction("A", "B")
+    assert result["interaction_found"] is False
+    assert result["severity"] == "unknown"
+
+
+async def test_contradictory_model_output_becomes_unknown_not_none(fakes):
+    fakes["answer"] = {"interaction_found": True, "severity": "none", "mechanism": "",
+                       "description": "", "confidence": 1.0}
+    result = await analyze_interaction("A", "B")
+    assert result["severity"] == "unknown"
+    assert result["confidence"] == 0.0
+
+
+async def test_no_label_text_for_either_drug_skips_the_llm(fakes):
+    fakes["labels"] = {}
+    result = await analyze_interaction("A", "B")
+    assert result["severity"] == "unknown"
+    assert fakes["llm_calls"] == []
+
+
+async def test_one_label_is_enough_to_ask_the_model(fakes):
+    fakes["labels"] = {"A": LABEL_A}   # B has no label at all
+    result = await analyze_interaction("A", "B")
+    assert len(fakes["llm_calls"]) == 1
+    assert "no FDA label interaction text was available" in fakes["llm_calls"][0]
+    assert result["interaction_found"] is True
+
+
+async def test_llm_returning_none_gives_unknown(fakes):
+    fakes["answer"] = None
+    result = await analyze_interaction("A", "B")
+    assert result["severity"] == "unknown"
+    assert "failed" in result["description"].lower()
+
+
+async def test_llm_returning_a_list_gives_unknown(fakes):
+    fakes["answer"] = [{"interaction_found": True}]
+    result = await analyze_interaction("A", "B")
+    assert result["severity"] == "unknown"
+
+
+async def test_label_text_is_capped_in_the_prompt(fakes):
+    fakes["labels"] = {"A": LABEL_A + (" filler" * 5000), "B": LABEL_B}
+    await analyze_interaction("A", "B")
+    assert len(fakes["llm_calls"][0]) < 2 * interaction_agent.MAX_LABEL_CHARS + 3000
+
+
+# --------------------------------------------------------------------------
+# analyze_all_interactions
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("drugs", [[], ["OnlyOne"]])
+async def test_fewer_than_two_drugs_returns_empty(drugs):
+    assert await analyze_all_interactions(drugs) == []
+
+
+async def test_three_drugs_make_three_pairs(monkeypatch):
+    seen = []
+
+    async def fake_analyze(a, b):
+        seen.append((a, b))
+        return {"drug_a": a, "drug_b": b}
+
+    monkeypatch.setattr(interaction_agent, "analyze_interaction", fake_analyze)
+    results = await analyze_all_interactions(["X", "Y", "Z"])
+    assert seen == [("X", "Y"), ("X", "Z"), ("Y", "Z")]
+    assert len(results) == 3

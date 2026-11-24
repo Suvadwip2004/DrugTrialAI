@@ -13,3 +13,13 @@ dependencies = [
     "qdrant-client>=1.19.1",
     "spacy>=3.8.16",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1.post1",
+]
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
