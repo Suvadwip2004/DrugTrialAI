@@ -50,6 +50,7 @@ def _source_text(drugs, condition, patient_context, interactions, risk, trials, 
             "trials": trials,
             "literature": literature,
         },
+        ensure_ascii=False,
         default=str,
     )
     return blob.lower()
@@ -140,11 +141,14 @@ def validate_report(
 
         # 5. Hard-stop consistency
         hard_stop = bool(risk.get("hard_stop"))
-        claims_contra = bool(re.search(r"contraindicat|hard stop", summary, re.IGNORECASE))
+        is_negated = bool(re.search(r"\b(?:no|not|neither|without|none)\s+(?:known\s+|identified\s+|direct\s+)?(?:contraindicat\w*|hard\s*stop)", summary, re.IGNORECASE))
+        has_contra_mention = bool(re.search(r"contraindicat|hard\s*stop", summary, re.IGNORECASE))
+        claims_contra = has_contra_mention and not is_negated
+
         if claims_contra and not hard_stop:
             checks["hard_stop_consistent"] = False
             errors.append("Summary claims a contraindication/hard stop, but none was identified by the risk agent.")
-        elif hard_stop and not claims_contra:
+        elif hard_stop and not has_contra_mention:
             checks["hard_stop_consistent"] = False
             warnings.append("A hard stop was triggered but the summary does not mention it.")
         else:
