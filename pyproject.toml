@@ -6,12 +6,14 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "dotenv>=0.9.9",
+    "fastapi>=0.165.0",
     "google-genai>=2.23.0",
     "httpx>=0.28.1",
     "langgraph>=1.2.20",
     "ollama>=0.6.3",
     "qdrant-client>=1.19.1",
     "spacy>=3.8.16",
+    "uvicorn>=0.54.0",
 ]
 
 [dependency-groups]

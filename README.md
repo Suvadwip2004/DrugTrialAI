@@ -104,7 +104,7 @@ Detailed visual architecture and sequence diagrams are available in [diagram.md]
 
 ```
 DrugTrialAI/
-├── core_engine/
+├── core_engine/                      # Multi-Agent Core, RAG & Integrations
 │   ├── agents/
 │   │   ├── orchestrator.py           # LangGraph DAG & pipeline loop
 │   │   ├── interaction_agent.py      # DDI detection & quote verification
@@ -129,7 +129,17 @@ DrugTrialAI/
 │   ├── models/
 │   │   └── schemas.py                # Pydantic v2 request/response models
 │   └── config.py                     # Centralized settings & environment variables
+├── backend/                          # FastAPI REST API Gateway
+│   ├── main.py                       # App factory, CORS, and server startup
+│   ├── routes/
+│   │   ├── analyze.py                # POST /api/v1/analyze
+│   │   ├── drugs.py                  # POST /api/v1/drugs/interactions & label routes
+│   │   ├── trials.py                 # GET /api/v1/trials/search
+│   │   └── health.py                 # GET /api/v1/health service status
+│   └── schemas/
+│       └── api_models.py             # API request/response models
 ├── tests/
+│   ├── test_backend_api.py           # 5 tests for FastAPI endpoints
 │   ├── test_interaction_agent.py     # 37 unit tests for quote verification & extraction
 │   ├── test_risk_agent.py            # 9 unit tests for risk math & organ weighting
 │   └── test_validator_agent.py       # 5 unit tests for validation & hallucination checks
@@ -197,7 +207,23 @@ NCBI_EMAIL=your_email@example.com
 
 ## Running the System
 
-### A. CLI Analysis Runner (`run.py`)
+### A. Start the FastAPI Web Backend (`backend/`)
+
+Launch the FastAPI REST API with interactive Swagger docs:
+
+```bash
+uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Once running:
+- **Interactive Swagger UI:** [http://localhost:8000/docs](http://localhost:8000/docs)
+- **ReDoc Documentation:** [http://localhost:8000/redoc](http://localhost:8000/redoc)
+- **Service Health Check:** [http://localhost:8000/api/v1/health](http://localhost:8000/api/v1/health)
+- **Run Analysis Endpoint:** `POST http://localhost:8000/api/v1/analyze`
+- **Drug Interaction Endpoint:** `POST http://localhost:8000/api/v1/drugs/interactions`
+- **Clinical Trials Query:** `GET http://localhost:8000/api/v1/trials/search`
+
+### B. CLI Analysis Runner (`run.py`)
 
 Execute an analysis with customizable drugs, clinical conditions, and patient parameters:
 
