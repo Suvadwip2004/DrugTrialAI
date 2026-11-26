@@ -2,13 +2,15 @@
 
 [![Python](https://img.shields.io/badge/Python-3.13+-blue.svg)](https://www.python.org/)
 [![Package Manager](https://img.shields.io/badge/uv-fast-blueviolet.svg)](https://docs.astral.sh/uv/)
+[![Backend](https://img.shields.io/badge/FastAPI-REST%20API-009688.svg)](https://fastapi.tiangolo.com/)
+[![Frontend](https://img.shields.io/badge/React%2019-Vite%20%2B%20Tailwind%20CSS-38bdf8.svg)](frontend/)
 [![Orchestration](https://img.shields.io/badge/LangGraph-Multi--Agent-orange.svg)](https://langchain-ai.github.io/langgraph/)
 [![Vector DB](https://img.shields.io/badge/Qdrant-Vector%20Search-red.svg)](https://qdrant.tech/)
 [![Inference](https://img.shields.io/badge/Ollama-llama3.2%3A3b-black.svg)](https://ollama.ai/)
-[![Tests](https://img.shields.io/badge/pytest-51%20passed-brightgreen.svg)](https://pytest.org/)
+[![Tests](https://img.shields.io/badge/pytest-56%20passed-brightgreen.svg)](https://pytest.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-An autonomous, multi-agent clinical decision-support system that detects drug-drug interactions, evaluates clinical trial eligibility, and generates structured, audit-ready reports. Built on a **100% free, local-first stack** utilizing LangGraph, Ollama (`llama3.2:3b`), Qdrant, and authoritative public federal APIs (RxNav, OpenFDA, ClinicalTrials.gov, PubMed, and DailyMed).
+An autonomous, multi-agent clinical decision-support system that detects drug-drug interactions, evaluates clinical trial eligibility, and generates structured, audit-ready reports. Built on a **100% free, local-first stack** utilizing LangGraph, Ollama (`llama3.2:3b`), Qdrant, FastAPI, a React/Vite JavaScript web frontend, and authoritative public federal APIs (RxNav, OpenFDA, ClinicalTrials.gov, PubMed, and DailyMed).
 
 > **Medical & Decision-Support Disclaimer:**  
 > DrugTrialAI is a decision-support and research reference tool, not a diagnostic, prescribing, or clinical treatment system. Safety-critical decisions are guarded by deterministic rule engines and source-grounded verification.
@@ -24,19 +26,22 @@ An autonomous, multi-agent clinical decision-support system that detects drug-dr
 - **Hybrid RAG Literature Retrieval:** Uses spaCy sentence boundary chunking with sliding-window overlap and 768-dimensional local embeddings (`nomic-embed-text`) stored in Qdrant to retrieve PubMed abstracts.
 - **10-Point Deterministic Validator Gate:** Audits generated reports against raw source data, verifying trial NCT IDs, numbers, risk tiers, and citation integrity. If validation fails, an automatic retry and deterministic fallback loop ensures the report is never released corrupted.
 - **Full Audit Trail:** Emits a clinician-friendly Markdown report (`report.md`) alongside a complete JSON audit payload (`report.json`) logging intermediate agent outputs and confidence scores.
+- **FastAPI REST Gateway & React Web UI:** Exposes endpoints for full multi-agent analysis, pairwise DDI verification, RxCUI/OpenFDA label inspection, ClinicalTrials.gov search, and live Ollama/Qdrant health checks, paired with a standalone JavaScript web frontend (`frontend/`) featuring a horizontal clinical input workspace.
 
 ---
 
 ## System Architecture
 
-DrugTrialAI coordinates 6 specialized agents via a compiled **LangGraph** `StateGraph`:
+DrugTrialAI coordinates 6 specialized agents via a compiled **LangGraph** `StateGraph`, accessible from the FastAPI + React Web UI or the CLI:
 
 ```
-                       ┌─────────────────────────┐
-                       │   CLI Entry (run.py)    │
-                       └────────────┬────────────┘
-                                    │
-                                    ▼
+    ┌──────────────────────────┐        ┌─────────────────────────┐
+    │  React Web UI (frontend) │───────▶│  FastAPI API (backend)  │
+    └──────────────────────────┘        └────────────┬────────────┘
+                                                     │
+    ┌─────────────────────────┐                      │
+    │   CLI Entry (run.py)    │──────────────────────┤
+    └─────────────────────────┘                      ▼
 ┌───────────────────────────────────────────────────────────────────────────┐
 │                    LANGGRAPH ORCHESTRATOR PIPELINE                        │
 │                                                                           │
@@ -84,6 +89,8 @@ Detailed visual architecture and sequence diagrams are available in [diagram.md]
 ## Tech Stack ($0 Free-Tier)
 
 - **Language & Runtime:** Python `>=3.13` managed with [`uv`](https://docs.astral.sh/uv/)
+- **Backend API:** [FastAPI](https://fastapi.tiangolo.com/) + [Uvicorn](https://www.uvicorn.org/)
+- **Frontend UI:** [React 19](https://react.dev/) + [Vite](https://vite.dev/) + [Tailwind CSS v4](https://tailwindcss.com/) (JavaScript)
 - **Agent Orchestration:** [LangGraph](https://github.com/langchain-ai/langgraph)
 - **Local LLM Inference:** [Ollama](https://ollama.ai/) (`llama3.2:3b` default)
 - **Vector Database:** [Qdrant](https://qdrant.tech/) (`clinical_documents` collection, 768d cosine)
@@ -138,6 +145,16 @@ DrugTrialAI/
 │   │   └── health.py                 # GET /api/v1/health service status
 │   └── schemas/
 │       └── api_models.py             # API request/response models
+├── frontend/                         # Standalone React + Vite Web UI (JavaScript)
+│   ├── index.html                    # App entry HTML
+│   ├── package.json                  # Frontend dependencies & Vite scripts
+│   ├── vite.config.js                # Dev server & /api proxy to :8000
+│   ├── README.md                     # Frontend-specific documentation
+│   └── src/
+│       ├── App.jsx                   # Top navigation & view switcher
+│       ├── api/client.js             # FastAPI REST client
+│       ├── data/presets.js           # Clinical presets & pipeline metadata
+│       └── components/               # Horizontal case input, risk gauge, DDI, trials, RAG & report UI
 ├── tests/
 │   ├── test_backend_api.py           # 5 tests for FastAPI endpoints
 │   ├── test_interaction_agent.py     # 37 unit tests for quote verification & extraction
@@ -173,6 +190,9 @@ DrugTrialAI/
    ```bash
    docker run -d -p 6333:6333 -v $(pwd)/qdrant_storage:/qdrant/storage qdrant/qdrant
    ```
+
+4. **Node.js & npm (for the Frontend Web UI):**
+   Requires Node.js `>=18` (tested on Node `v24.20.0` / `npm 11.19.0`).
 
 ### 2. Installation
 
@@ -221,9 +241,25 @@ Once running:
 - **Service Health Check:** [http://localhost:8000/api/v1/health](http://localhost:8000/api/v1/health)
 - **Run Analysis Endpoint:** `POST http://localhost:8000/api/v1/analyze`
 - **Drug Interaction Endpoint:** `POST http://localhost:8000/api/v1/drugs/interactions`
+- **RxCUI & FDA Label Endpoints:** `GET /api/v1/drugs/{drug_name}/rxcui`, `GET /api/v1/drugs/{drug_name}/label`
 - **Clinical Trials Query:** `GET http://localhost:8000/api/v1/trials/search`
 
-### B. CLI Analysis Runner (`run.py`)
+### B. Start the React Web Frontend (`frontend/`)
+
+With the FastAPI backend running on port `8000`, install frontend dependencies and launch the Vite dev server from the separate `frontend/` directory:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173). Vite automatically proxies `/api/*` requests to `http://localhost:8000` (see [frontend/README.md](frontend/README.md) for details). The UI provides:
+- **Multi-Agent Case Analysis:** Horizontal clinical input panel (drugs, condition, age, sex, renal/hepatic function, comorbidities, trial phases, presets), live 6-stage progress tracker, 10-check validation panel, deterministic risk gauge, verified interaction cards, trial eligibility matches, PubMed RAG citations, and `report.md` / `report.json` export.
+- **DDI & FDA Label Explorer:** Direct pairwise DDI check plus NLM RxCUI and OpenFDA package insert lookup.
+- **Clinical Trials Search:** Live ClinicalTrials.gov v2 filter search.
+
+### C. CLI Analysis Runner (`run.py`)
 
 Execute an analysis with customizable drugs, clinical conditions, and patient parameters:
 
@@ -249,7 +285,7 @@ Upon completion, the pipeline outputs:
 - **`report.md`**: Clinician-facing Markdown decision-support report.
 - **`report.json`**: Structured audit trail containing agent payloads, citations, and validation checks.
 
-### B. Programmatic Demo Runner (`main.py`)
+### D. Programmatic Demo Runner (`main.py`)
 
 Run the preconfigured demonstration:
 
@@ -257,7 +293,7 @@ Run the preconfigured demonstration:
 uv run python main.py
 ```
 
-### C. Ingest Literature into Qdrant
+### E. Ingest Literature into Qdrant
 
 Ingest PubMed abstracts for specific clinical domains or drug combinations:
 
@@ -270,9 +306,9 @@ uv run python -m core_engine.integrations.pubmed_ingest \
 
 ---
 
-## Running Tests
+## Running Tests & Building
 
-DrugTrialAI includes a comprehensive unit test suite covering DDI quote validation, deterministic risk arithmetic, and anti-hallucination validation rules:
+DrugTrialAI includes a unit test suite covering FastAPI endpoints, DDI quote validation, deterministic risk arithmetic, and anti-hallucination validation rules:
 
 ```bash
 uv run pytest tests/
@@ -280,11 +316,17 @@ uv run pytest tests/
 
 **Test Output:**
 ```text
-tests/test_interaction_agent.py .....................................    [ 72%]
-tests/test_risk_agent.py .........                                       [ 90%]
+tests/test_backend_api.py .....                                          [  8%]
+tests/test_interaction_agent.py .....................................    [ 75%]
+tests/test_risk_agent.py .........                                       [ 91%]
 tests/test_validator_agent.py .....                                      [100%]
 
-============================== 51 passed in 0.32s ==============================
+============================== 56 passed in 1.20s ==============================
+```
+
+To verify the frontend production bundle:
+```bash
+npm --prefix frontend run build
 ```
 
 ---
