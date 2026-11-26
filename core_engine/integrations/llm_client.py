@@ -8,8 +8,15 @@ from ollama import AsyncClient
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "phi3:mini")
+DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+
+# Ollama silently truncates prompts that exceed the context window, and its
+# default window is small. The interaction prompt carries two FDA labels, so
+# ask for a bigger one explicitly.
+NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "8192"))
+TEXT_OPTIONS = {"num_ctx": NUM_CTX}
+JSON_OPTIONS = {"num_ctx": NUM_CTX, "temperature": 0}  # extraction should be repeatable
 
 _client: AsyncClient | None = None
 
@@ -37,6 +44,7 @@ async def call_llm(prompt: str, model: str | None = None) -> str:
         response = await client.chat(
             model=model_name,
             messages=[{"role": "user", "content": prompt}],
+            options=TEXT_OPTIONS,
         )
     except Exception as e:
         logger.error(
@@ -59,10 +67,7 @@ async def call_llm_json(prompt: str, model: str | None = None) -> dict | list | 
     Send a prompt to the local Ollama model and force a structured JSON response.
 
     Uses Ollama's format='json' mode, which constrains the model to emit
-    valid JSON. Smaller local models (like phi3) are less reliable at strict
-    JSON formatting than Gemini/GPT-class models, so a bad model choice here
-    is the most likely cause of parse failures -- consider a larger model
-    (e.g. llama3.1, mistral) if you see frequent JSON parse errors.
+    valid JSON.
     """
     client = _get_client()
     model_name = model or DEFAULT_MODEL
@@ -72,6 +77,7 @@ async def call_llm_json(prompt: str, model: str | None = None) -> dict | list | 
             model=model_name,
             messages=[{"role": "user", "content": prompt}],
             format="json",
+            options=JSON_OPTIONS,
         )
     except Exception as e:
         logger.error(
@@ -93,8 +99,6 @@ async def call_llm_json(prompt: str, model: str | None = None) -> dict | list | 
         return None
 
 
-# ---- standalone test ----
-# Run directly with: uv run python -m core_engine.integrations.llm_client
 if __name__ == "__main__":
     import asyncio
 

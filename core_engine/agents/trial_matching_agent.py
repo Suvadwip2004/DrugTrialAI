@@ -1,9 +1,16 @@
+"""
+Clinical Trial Matching Agent.
+
+Queries ClinicalTrials.gov and scores patient/condition context against
+trial eligibility criteria via LLM evaluation.
+"""
+
 from __future__ import annotations
 
 import logging
 
-from integrations.clinicaltrials_client import search_trials
-from integrations.llm_client import call_llm_json
+from core_engine.integrations.clinicaltrials_client import search_trials
+from core_engine.integrations.llm_client import call_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -66,11 +73,16 @@ async def score_trial_match(trial: dict, patient_context: dict) -> dict:
         })
         return enriched
 
+    try:
+        score = float(result.get("eligibility_match_score", 0.0))
+    except (ValueError, TypeError):
+        score = 0.0
+
     enriched = dict(trial)
     enriched.update({
-        "eligibility_match_score": float(result.get("eligibility_match_score", 0.0)),
-        "reason": result.get("reason", ""),
-        "potential_concerns": result.get("potential_concerns", ""),
+        "eligibility_match_score": max(0.0, min(1.0, score)),
+        "reason": str(result.get("reason", "")),
+        "potential_concerns": str(result.get("potential_concerns", "")),
     })
     return enriched
 
@@ -103,34 +115,5 @@ async def find_matching_trials(
         scored = await score_trial_match(trial, patient_context)
         scored_trials.append(scored)
 
-    scored_trials.sort(key=lambda t: t["eligibility_match_score"], reverse=True)
+    scored_trials.sort(key=lambda t: t.get("eligibility_match_score", 0.0), reverse=True)
     return scored_trials
-
-
-# ---- standalone test ----
-if __name__ == "__main__":
-    import asyncio
-    import json
-
-    logging.basicConfig(level=logging.INFO)
-
-    async def _main():
-        patient_context = {
-            "age": 68,
-            "sex": "female",
-            "renal_function": "moderate_impairment",
-            "comorbidities": ["Chronic Kidney Disease Stage 3", "Hypertension"],
-        }
-
-        results = await find_matching_trials(
-            condition="Atrial Fibrillation",
-            drug_names=["Warfarin"],
-            patient_context=patient_context,
-            phases=["PHASE2", "PHASE3"],
-            max_trials=3,
-        )
-
-        print(f"\n=== Found {len(results)} scored trial(s) ===")
-        print(json.dumps(results, indent=2))
-
-    asyncio.run(_main())

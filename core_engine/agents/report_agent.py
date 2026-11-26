@@ -1,3 +1,15 @@
+"""
+Report Agent.
+
+Assembles the outputs of the other agents into one Markdown report.
+
+Design rule: the factual sections (interactions, risk, trials, literature)
+are built directly from the data in plain code. The LLM writes ONLY the short
+summary paragraph, and is told not to add facts. This means the model can
+never alter a severity, a risk score, or a trial ID -- those come straight
+from the agents that produced them.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -16,7 +28,7 @@ SUMMARY_PROMPT_TEMPLATE = """You are writing the executive summary of a clinical
 
 Rules:
 - Use ONLY the facts provided. Do not add drugs, numbers, risks or recommendations that are not listed.
-- Mention the overall risk level and any hard stop first.
+- Mention the overall risk level. If a hard stop / contraindication is identified, mention it clearly; otherwise do not claim any contraindications.
 - Return only the summary text, no headers, no markdown.
 
 Facts:
@@ -38,7 +50,10 @@ def _interaction_section(interactions: list[dict]) -> str:
         pair = f"{item.get('drug_a')} + {item.get('drug_b')}"
         severity = item.get("severity", "unknown")
         if not item.get("interaction_found"):
-            lines.append(f"- **{pair}**: no interaction identified in FDA label text (severity: {severity}).")
+            if severity == "unknown":
+                lines.append(f"- **{pair}**: **could not be assessed** from the available FDA label text (severity: unknown).")
+            else:
+                lines.append(f"- **{pair}**: no interaction identified in FDA label text (severity: {severity}).")
             if item.get("description"):
                 lines.append(f"  - Note: {item['description']}")
             continue
@@ -48,6 +63,8 @@ def _interaction_section(interactions: list[dict]) -> str:
             lines.append(f"  - Mechanism: {item['mechanism']}")
         if item.get("description"):
             lines.append(f"  - Clinical note: {item['description']}")
+        if item.get("evidence"):
+            lines.append(f"  - Label evidence: \"{item['evidence']}\"")
         lines.append(f"  - Source: {item.get('source', 'unknown')}")
     return "\n".join(lines)
 
@@ -99,7 +116,7 @@ def _literature_section(literature: dict | None) -> str:
     answer = literature.get("answer", "").strip()
     lines.append(answer or "_No answer available._")
     if not literature.get("grounded"):
-        lines.append("\n>  This literature answer could not be fully verified against its sources. Treat with caution.")
+        lines.append("\n> ⚠️ This literature answer could not be fully verified against its sources. Treat with caution.")
 
     cited = literature.get("cited_sources", [])
     if cited:
@@ -152,22 +169,29 @@ async def generate_report(
     risk: dict | None = None,
     trials: list[dict] | None = None,
     literature: dict | None = None,
+    use_llm_summary: bool = True,
 ) -> dict:
+    """
+    Build the final report.
 
+    If `use_llm_summary` is False, the deterministic summary is used. The
+    orchestrator does this on its last retry after validation failures.
+    """
     interactions = interactions or []
     trials = trials or []
 
-    # 1. LLM writes only the summary, from facts we hand it.
     facts = _build_facts_for_summary(drugs, condition, interactions, risk, trials)
-    try:
-        summary = (await call_llm(SUMMARY_PROMPT_TEMPLATE.format(facts=facts))).strip()
-        if not summary:
-            raise ValueError("empty summary")
-    except Exception as e:
-        logger.error("Summary generation failed, using fallback: %s", e)
+    if use_llm_summary:
+        try:
+            summary = (await call_llm(SUMMARY_PROMPT_TEMPLATE.format(facts=facts))).strip()
+            if not summary:
+                raise ValueError("empty summary")
+        except Exception as e:
+            logger.error("Summary generation failed, using fallback: %s", e)
+            summary = _fallback_summary(interactions, risk, trials)
+    else:
         summary = _fallback_summary(interactions, risk, trials)
 
-    
     header = ["# Drug Interaction & Clinical Trial Report", ""]
     header.append(f"**Drugs:** {', '.join(drugs)}")
     if condition:
@@ -187,7 +211,6 @@ async def generate_report(
     ]
     report_md = "\n\n".join(sections) + "\n"
 
-    # 3. Collect citations for the validator / audit trail.
     citations: list[dict] = []
     for item in interactions:
         if item.get("interaction_found"):
@@ -206,40 +229,3 @@ async def generate_report(
         citations.append({"type": "pubmed", "label": src["title"], "url": src["url"]})
 
     return {"report_md": report_md, "summary": summary, "citations": citations}
-
-
-# if __name__ == "__main__":
-#     import asyncio
-
-#     logging.basicConfig(level=logging.INFO)
-
-#     async def _main():
-#         mock_interactions = [{
-#             "drug_a": "Warfarin", "drug_b": "Amoxicillin", "interaction_found": True,
-#             "severity": "moderate", "mechanism": "May alter gut flora affecting vitamin K synthesis",
-#             "description": "May potentiate anticoagulant effect and raise INR.",
-#             "source": "openfda+llm", "confidence": 0.8,
-#         }]
-#         mock_risk = {
-#             "composite_risk_score": 6.5, "risk_level": "elevated", "hard_stop": False,
-#             "contributing_factors": ["Warfarin + Amoxicillin: moderate severity interaction",
-#                                      "Age 68 is an independent risk factor (>=65)"],
-#             "explanation": "The score reflects a moderate interaction combined with age and renal impairment.",
-#         }
-#         mock_trials = [{
-#             "nct_id": "NCT00000000", "title": "Example anticoagulation study", "status": "RECRUITING",
-#             "phase": ["PHASE3"], "eligibility_match_score": 0.78,
-#             "reason": "Condition and age range match.", "potential_concerns": "",
-#         }]
-
-#         result = await generate_report(
-#             drugs=["Warfarin", "Amoxicillin"],
-#             condition="Atrial Fibrillation",
-#             patient_context={"age": 68, "renal_function": "moderate_impairment"},
-#             interactions=mock_interactions,
-#             risk=mock_risk,
-#             trials=mock_trials,
-#         )
-#         print(result["report_md"])
-
-#     asyncio.run(_main())
