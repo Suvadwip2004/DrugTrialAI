@@ -10,7 +10,8 @@ __pycache__/
 venv/
 env/
 ENV/
-*json
+pubmed_clientresponse.json
+embedding_response.json
 # ---- uv ----
 # uv creates a local venv (.venv) and a lockfile (uv.lock).
 # Keep uv.lock committed (reproducible builds) — do NOT ignore it.
